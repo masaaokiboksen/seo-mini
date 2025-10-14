@@ -1,103 +1,160 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { downloadCSV, Row } from "@/lib/csv";
+
+
+type AnalyzeResponse = {
+  status: "ok";
+  domain: string;
+  searchVolumeEstimate: number;
+  trendScore: number;
+  recommendedKeywords: string[];
+  seed?: string;
+  source?: string;
+};
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<AnalyzeResponse | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setData(null);
+
+    // validate URL
+    try {
+      const u = new URL(url);
+      if (!u.protocol.startsWith("http")) throw new Error();
+    } catch {
+      setError("Please enter a valid URL (e.g., https://example.com)");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!res.ok) {
+        const msg = await res.json().catch(() => ({}));
+        throw new Error(msg?.error || "Request failed");
+      }
+
+      const json = (await res.json()) as AnalyzeResponse;
+      setData(json);
+    } catch (err: any) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onDownload = () => {
+    if (!data) return;
+    const rows: Row[] = data.recommendedKeywords.map((kw) => ({
+      keyword: kw,
+      trendScore: data.trendScore,
+      estimatedMonthlySearches: data.searchVolumeEstimate,
+      domain: data.domain,
+      source: data.source ?? "",
+    }));
+    downloadCSV(`${data.domain}-keywords`, rows);
+  };
+
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="max-w-2xl mx-auto px-4 py-16">
+        <h1 className="text-2xl font-semibold mb-6">SEO Mini — URL Analyzer</h1>
+
+        <form onSubmit={onSubmit} className="space-y-3">
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            type="url"
+            placeholder="https://example.com"
+            className="w-full rounded-xl border border-gray-300 bg-white p-3 outline-none focus:ring-2 focus:ring-black"
+          />
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl border border-black bg-black text-white p-3 font-medium hover:opacity-90 disabled:opacity-50"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+            {loading ? "Analyzing..." : "Analyze"}
+          </button>
+        </form>
+
+        {data && (
+          <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Results for {data.domain}
+                </h2>
+                {data.seed && (
+                  <p className="text-xs text-gray-500">Seed: {data.seed}</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-gray-300 px-3 py-1 text-xs font-medium">
+                  Trend Score:{" "}
+                  <span className="ml-1 font-semibold">{data.trendScore}</span>
+                </span>
+                {data.source && (
+                  <span className="inline-flex items-center rounded-full border border-gray-300 px-3 py-1 text-xs font-medium">
+                    {data.source}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-700 mt-4">
+              Estimated Monthly Searches:{" "}
+              <span className="font-medium">{data.searchVolumeEstimate}</span>
+            </p>
+
+            {/* Keyword table */}
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2 pr-3">Keyword</th>
+                    <th className="py-2 pr-3">Trend Score</th>
+                    <th className="py-2 pr-3">Est. Monthly Searches</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.recommendedKeywords.map((kw) => (
+                    <tr key={kw} className="border-b last:border-0">
+                      <td className="py-2 pr-3">{kw}</td>
+                      <td className="py-2 pr-3">{data.trendScore}</td>
+                      <td className="py-2 pr-3">{data.searchVolumeEstimate}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4">
+              <button
+                onClick={onDownload}
+                className="rounded-xl border border-black bg-white text-black px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              >
+                Download CSV
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }

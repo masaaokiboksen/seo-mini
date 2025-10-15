@@ -1,60 +1,42 @@
-// /src/app/api/analyze/route.ts
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getKeywordIdeas } from "@/lib/trends";
+import { getSuggestions } from "@/lib/suggest";
 import { rateLimit } from "@/lib/rate-limit";
-import { fetchSeoData } from "@/lib/provider";
-
-
-export async function GET() {
-  return Response.json({ ok: true, route: "/api/analyze" });
-}
+import { fetchSeoData } from "@/lib/provider"; // optional depending on your setup
 
 export async function POST(req: NextRequest) {
-  // --- rate limit (10 req / minute per IP) ---
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "local";
-
-  const rl = rateLimit(`analyze:${ip}`, 10, 60_000);
-  if (!rl.allowed) {
-    return new Response(
-      JSON.stringify({ error: "Too many requests. Please wait a minute." }),
-      { status: 429, headers: { "Content-Type": "application/json" } }
-    );
-  }
-  // -------------------------------------------
-
   try {
-    const body = await req.json();
-    const input = (body?.url ?? "").toString().trim();
+    await rateLimit(req);
 
-    // Validate URL
-    let target: URL;
-    try {
-      target = new URL(input);
-      if (!/^https?:/.test(target.protocol)) throw new Error("bad protocol");
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid URL. Use https://example.com" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+    const { url, provider } = await req.json();
+    if (!url) {
+      return NextResponse.json({ error: "Missing URL" }, { status: 400 });
     }
 
-    // Seed from hostname (before first dot)
-    const hostname = target.hostname.replace(/^www\./, "");
-    const seed = hostname.split(".")[0] || "site";
+    const domain = new URL(url).hostname;
+    let result;
 
-    // Free MVP data: Google Trends
-    const result = await fetchSeoData(seed);
+    if (provider === "trends") {
+      result = await getKeywordIdeas(domain);
+    } else if (provider === "suggest") {
+      result = await getSuggestions(domain);
+    } else {
+      return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
+    }
 
-    return Response.json({
+    return NextResponse.json({
       status: "ok",
-      domain: hostname,
-      searchVolumeEstimate: result.estimatedMonthlySearches,
-      trendScore: result.trendScore,
-      recommendedKeywords: result.recommendedKeywords,
-      seed,
-      source: result.source,
-      rateLimit: { remaining: rl.remaining, resetInMs: rl.resetInMs },
+      domain,
+      searchVolumeEstimate: result.estimatedMonthlySearches ?? 0,
+      trendScore: result.trendScore ?? 0,
+      recommendedKeywords: result.recommendedKeywords ?? [],
+      source: provider,
     });
-    
+  } catch (err: any) {
+    console.error("API Error:", err);
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: 500 }
+    );
+  }
+}

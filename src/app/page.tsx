@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { downloadCSV, Row } from "@/lib/csv";
 
-
 type AnalyzeResponse = {
   status: "ok";
   domain: string;
@@ -19,6 +18,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AnalyzeResponse | null>(null);
+  const [provider, setProvider] = useState("trends");
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +39,7 @@ export default function Home() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, provider }),
       });
 
       if (!res.ok) {
@@ -81,6 +81,19 @@ export default function Home() {
             placeholder="https://example.com"
             className="w-full rounded-xl border border-gray-300 bg-white p-3 outline-none focus:ring-2 focus:ring-black"
           />
+
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-600">Provider:</label>
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className="rounded-lg border border-gray-300 bg-white p-2 text-sm"
+            >
+              <option value="trends">Google Trends (Free)</option>
+              <option value="suggest">Google Autocomplete (Free)</option>
+            </select>
+          </div>
+
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
@@ -122,7 +135,6 @@ export default function Home() {
               <span className="font-medium">{data.searchVolumeEstimate}</span>
             </p>
 
-            {/* Keyword table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
